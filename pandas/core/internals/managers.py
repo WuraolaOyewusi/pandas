@@ -34,10 +34,7 @@ import pandas.core.algorithms as algos
 from pandas.core.base import PandasObject
 from pandas.core.indexers import maybe_convert_indices
 from pandas.core.indexes.api import Index, MultiIndex, ensure_index
-
-from pandas.io.formats.printing import pprint_thing
-
-from .blocks import (
+from pandas.core.internals.blocks import (
     Block,
     CategoricalBlock,
     DatetimeTZBlock,
@@ -49,12 +46,14 @@ from .blocks import (
     get_block_type,
     make_block,
 )
-from .concat import (  # all for concatenate_block_managers
+from pandas.core.internals.concat import (  # all for concatenate_block_managers
     combine_concat_plans,
     concatenate_join_units,
     get_mgr_concatenation_plan,
     is_uniform_join_units,
 )
+
+from pandas.io.formats.printing import pprint_thing
 
 # TODO: flexible with index=None and/or items=None
 
@@ -280,30 +279,7 @@ class BlockManager(PandasObject):
                 unpickle_block(b["values"], b["mgr_locs"]) for b in state["blocks"]
             )
         else:
-            # discard anything after 3rd, support beta pickling format for a
-            # little while longer
-            ax_arrays, bvalues, bitems = state[:3]
-
-            self.axes = [ensure_index(ax) for ax in ax_arrays]
-
-            if len(bitems) == 1 and self.axes[0].equals(bitems[0]):
-                # This is a workaround for pre-0.14.1 pickles that didn't
-                # support unpickling multi-block frames/panels with non-unique
-                # columns/items, because given a manager with items ["a", "b",
-                # "a"] there's no way of knowing which block's "a" is where.
-                #
-                # Single-block case can be supported under the assumption that
-                # block items corresponded to manager items 1-to-1.
-                all_mgr_locs = [slice(0, len(bitems[0]))]
-            else:
-                all_mgr_locs = [
-                    self.axes[0].get_indexer(blk_items) for blk_items in bitems
-                ]
-
-            self.blocks = tuple(
-                unpickle_block(values, mgr_locs)
-                for values, mgr_locs in zip(bvalues, all_mgr_locs)
-            )
+            raise NotImplementedError("pre-0.14.1 pickles are no longer supported")
 
         self._post_setstate()
 
@@ -339,6 +315,32 @@ class BlockManager(PandasObject):
                 f"block items\n# manager items: {len(self.items)}, # "
                 f"tot_items: {tot_items}"
             )
+
+    def reduce(self, func, *args, **kwargs):
+        # If 2D, we assume that we're operating column-wise
+        if self.ndim == 1:
+            # we'll be returning a scalar
+            blk = self.blocks[0]
+            return func(blk.values, *args, **kwargs)
+
+        res = {}
+        for blk in self.blocks:
+            bres = func(blk.values, *args, **kwargs)
+
+            if np.ndim(bres) == 0:
+                # EA
+                assert blk.shape[0] == 1
+                new_res = zip(blk.mgr_locs.as_array, [bres])
+            else:
+                assert bres.ndim == 1, bres.shape
+                assert blk.shape[0] == len(bres), (blk.shape, bres.shape, args, kwargs)
+                new_res = zip(blk.mgr_locs.as_array, bres)
+
+            nr = dict(new_res)
+            assert not any(key in res for key in nr)
+            res.update(nr)
+
+        return res
 
     def apply(self, f, filter=None, **kwargs):
         """
@@ -645,12 +647,6 @@ class BlockManager(PandasObject):
         return all(block.is_numeric for block in self.blocks)
 
     @property
-    def is_datelike_mixed_type(self):
-        # Warning, consolidation needs to get checked upstairs
-        self._consolidate_inplace()
-        return any(block.is_datelike for block in self.blocks)
-
-    @property
     def any_extension_types(self):
         """Whether any of the blocks in this manager are extension blocks"""
         return any(block.is_extension for block in self.blocks)
@@ -712,16 +708,16 @@ class BlockManager(PandasObject):
 
         return type(self)(new_blocks, axes, do_integrity_check=False)
 
-    def get_slice(self, slobj, axis=0):
+    def get_slice(self, slobj: slice, axis: int = 0):
         if axis >= self.ndim:
             raise IndexError("Requested axis not found in manager")
 
         if axis == 0:
             new_blocks = self._slice_take_blocks_ax0(slobj)
         else:
-            slicer = [slice(None)] * (axis + 1)
-            slicer[axis] = slobj
-            slicer = tuple(slicer)
+            _slicer = [slice(None)] * (axis + 1)
+            _slicer[axis] = slobj
+            slicer = tuple(_slicer)
             new_blocks = [blk.getitem_block(slicer) for blk in self.blocks]
 
         new_axes = list(self.axes)
@@ -731,11 +727,11 @@ class BlockManager(PandasObject):
         bm._consolidate_inplace()
         return bm
 
-    def __contains__(self, item):
+    def __contains__(self, item) -> bool:
         return item in self.items
 
     @property
-    def nblocks(self):
+    def nblocks(self) -> int:
         return len(self.blocks)
 
     def copy(self, deep=True):
@@ -1316,7 +1312,7 @@ class BlockManager(PandasObject):
                     # only one item and each mgr loc is a copy of that single
                     # item.
                     for mgr_loc in mgr_locs:
-                        newblk = blk.copy(deep=True)
+                        newblk = blk.copy(deep=False)
                         newblk.mgr_locs = slice(mgr_loc, mgr_loc + 1)
                         blocks.append(newblk)
 
