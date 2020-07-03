@@ -162,7 +162,7 @@ class TestJoin:
         _check_join(self.df, self.df2, joined_both, ["key1", "key2"], how="inner")
 
     def test_handle_overlap(self):
-        joined = merge(self.df, self.df2, on="key2", suffixes=[".foo", ".bar"])
+        joined = merge(self.df, self.df2, on="key2", suffixes=(".foo", ".bar"))
 
         assert "key1.foo" in joined
         assert "key1.bar" in joined
@@ -173,7 +173,7 @@ class TestJoin:
             self.df2,
             left_on="key2",
             right_on="key1",
-            suffixes=[".foo", ".bar"],
+            suffixes=(".foo", ".bar"),
         )
         assert "key1.foo" in joined
         assert "key2.bar" in joined
@@ -298,7 +298,7 @@ class TestJoin:
 
         expected = df.join(df2, on="key")
         expected = expected[expected["value"].notna()]
-        tm.assert_series_equal(joined["key"], expected["key"], check_dtype=False)
+        tm.assert_series_equal(joined["key"], expected["key"])
         tm.assert_series_equal(joined["value"], expected["value"], check_dtype=False)
         tm.assert_index_equal(joined.index, expected.index)
 

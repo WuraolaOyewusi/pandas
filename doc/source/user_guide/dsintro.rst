@@ -273,7 +273,7 @@ pandas object. Like Series, DataFrame accepts many different kinds of input:
 * Dict of 1D ndarrays, lists, dicts, or Series
 * 2-D numpy.ndarray
 * `Structured or record
-  <https://docs.scipy.org/doc/numpy/user/basics.rec.html>`__ ndarray
+  <https://numpy.org/doc/stable/user/basics.rec.html>`__ ndarray
 * A ``Series``
 * Another ``DataFrame``
 
@@ -396,6 +396,28 @@ From a Series
 The result will be a DataFrame with the same index as the input Series, and
 with one column whose name is the original name of the Series (only if no other
 column name provided).
+
+.. _basics.dataframe.from_list_dataclasses:
+
+From a list of dataclasses
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. versionadded:: 1.1.0
+
+Data Classes as introduced in `PEP557 <https://www.python.org/dev/peps/pep-0557>`__,
+can be passed into the DataFrame constructor.
+Passing a list of dataclasses is equivalent to passing a list of dictionaries.
+
+Please be aware, that that all values in the list should be dataclasses, mixing
+types in the list would result in a TypeError.
+
+.. ipython:: python
+
+    from dataclasses import make_dataclass
+
+    Point = make_dataclass("Point", [("x", int), ("y", int)])
+
+    pd.DataFrame([Point(0, 0), Point(0, 3), Point(2, 3)])
 
 **Missing data**
 
@@ -610,7 +632,7 @@ union of the column and row labels.
 
 When doing an operation between DataFrame and Series, the default behavior is
 to align the Series **index** on the DataFrame **columns**, thus `broadcasting
-<https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html>`__
+<https://numpy.org/doc/stable/user/basics.broadcasting.html>`__
 row-wise. For example:
 
 .. ipython:: python
@@ -696,7 +718,7 @@ indexing semantics and data model are quite different in places from an n-dimens
 array.
 
 :class:`Series` implements ``__array_ufunc__``, which allows it to work with NumPy's
-`universal functions <https://docs.scipy.org/doc/numpy/reference/ufuncs.html>`_.
+`universal functions <https://numpy.org/doc/stable/reference/ufuncs.html>`_.
 
 The ufunc is applied to the underlying array in a Series.
 
